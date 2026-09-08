@@ -1,5 +1,6 @@
 #include "cpu_load_monitor.hpp"
 
+#include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
 
@@ -19,12 +20,25 @@ bool CpuLoadMonitor::init() {
   previous_snapshots.resize(core_count);
   current_snapshots.resize(core_count);
 
+  stat_fd = open("/proc/stat", O_RDONLY);
+
+  if (stat_fd == -1) {
+    std::cerr << "Failed to open /proc/stat." << std::endl;
+    return false;
+  }
+
   if (!read_snapshots(previous_snapshots)) {
     std::cerr << "Failed to read initial CPU snapshot." << std::endl;
     return false;
   }
 
   return true;
+}
+
+CpuLoadMonitor::~CpuLoadMonitor() {
+  if (stat_fd != -1) {
+    close(stat_fd);
+  }
 }
 
 void CpuLoadMonitor::show_load() {
@@ -73,42 +87,89 @@ void CpuLoadMonitor::show_load() {
 }
 
 bool CpuLoadMonitor::read_snapshots(std::vector<CpuSnapshot>& snapshots) {
-  std::ifstream file("/proc/stat");
-
-  if (!file.is_open()) {
+  if (lseek(stat_fd, 0, SEEK_SET) == -1) {
     return false;
   }
 
-  std::string cpu_name;
   std::size_t cores_read = 0;
+  std::size_t buffer_size = 0;
 
-  while (file >> cpu_name) {
-    if (cpu_name == "cpu") {
-      file.ignore(10000, '\n');
-      continue;
-    }
+  while (cores_read < snapshots.size()) {
+    ssize_t bytes_read =
+        read(stat_fd, buffer + buffer_size, BUFFER_SIZE - buffer_size - 1);
 
-    if (cpu_name.rfind("cpu", 0) != 0) {
-      break;
-    }
-
-    std::size_t core_index = std::stoul(cpu_name.substr(3));
-
-    if (core_index >= snapshots.size()) {
-      file.ignore(10000, '\n');
-      continue;
-    }
-
-    CpuSnapshot& snapshot = snapshots[core_index];
-
-    if (!(file >> snapshot.user >> snapshot.nice >> snapshot.system >>
-          snapshot.idle >> snapshot.iowait >> snapshot.irq >>
-          snapshot.softirq >> snapshot.steal >> snapshot.guest >>
-          snapshot.guest_nice)) {
+    if (bytes_read < 0) {
       return false;
     }
 
-    ++cores_read;
+    if (bytes_read == 0) {
+      break;
+    }
+
+    buffer_size += static_cast<std::size_t>(bytes_read);
+    buffer[buffer_size] = '\0';
+
+    char* line = buffer;
+
+    while (true) {
+      char* newline = nullptr;
+
+      for (char* current = line; *current != '\0'; ++current) {
+        if (*current == '\n') {
+          newline = current;
+          break;
+        }
+      }
+
+      if (newline == nullptr) {
+        break;
+      }
+
+      *newline = '\0';
+
+      if (line[0] == 'c' && line[1] == 'p' && line[2] == 'u' &&
+          line[3] >= '0' && line[3] <= '9') {
+        std::size_t core_index = 0;
+        char* value = line + 3;
+
+        while (*value >= '0' && *value <= '9') {
+          core_index = core_index * 10 + static_cast<std::size_t>(*value - '0');
+
+          ++value;
+        }
+
+        if (core_index < snapshots.size()) {
+          CpuSnapshot& snapshot = snapshots[core_index];
+
+          int parsed = sscanf(value,
+                              "%llu %llu %llu %llu %llu "
+                              "%llu %llu %llu %llu %llu",
+                              &snapshot.user, &snapshot.nice, &snapshot.system,
+                              &snapshot.idle, &snapshot.iowait, &snapshot.irq,
+                              &snapshot.softirq, &snapshot.steal,
+                              &snapshot.guest, &snapshot.guest_nice);
+
+          if (parsed != 10) {
+            return false;
+          }
+
+          ++cores_read;
+        }
+      }
+
+      line = newline + 1;
+    }
+
+    if (line != buffer) {
+      std::size_t remaining =
+          buffer_size - static_cast<std::size_t>(line - buffer);
+
+      for (std::size_t i = 0; i < remaining; ++i) {
+        buffer[i] = line[i];
+      }
+
+      buffer_size = remaining;
+    }
   }
 
   return cores_read == snapshots.size();

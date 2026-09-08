@@ -1,6 +1,5 @@
 #include "init.hpp"
 
-#include <cstdlib>
 #include <iostream>
 
 void printToFile() { std::cout << "Print to file" << std::endl; }
@@ -17,7 +16,7 @@ Init::Init(int argc, char* argv[])
               [this]() { cpu_monitor.print_to_file(config); }},
              {2, "Change parameters", [this]() { change_params(); }},
              {3, "Back", [this]() { cli.back(); }}}},
-           {3, "Exit", []() { std::exit(0); }}},
+           {3, "Exit", [this]() { cli.stop(); }}},
       cli(menu),
       successful(false) {
   successful = cpu_monitor.init();
@@ -57,11 +56,14 @@ void Init::change_params() {
 
   std::cout << "Enter new file name: ";
 
+  std::cin.ignore(10000, '\n');
+
   std::string filename;
-  std::cin >> filename;
+  std::getline(std::cin, filename);
 
   if (filename.empty()) {
     std::cout << "Invalid file name." << std::endl;
+
     return;
   }
 

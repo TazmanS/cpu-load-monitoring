@@ -3,7 +3,9 @@
 #include <iostream>
 #include <vector>
 
-CLI::CLI(const std::vector<MenuItem>& menu) : menu(menu) {}
+CLI::CLI(const std::vector<MenuItem>& menu) : menu(menu) {
+  path.reserve(MAX_PATH_SIZE);
+}
 
 void CLI::show_menu() {
   const std::vector<MenuItem>* current_menu = &menu;
@@ -39,7 +41,7 @@ void CLI::show_menu() {
         item.callback();
       }
 
-      if (!item.children.empty()) {
+      if (!item.children.empty() && path.size() < MAX_PATH_SIZE) {
         path.push_back(index);
       }
 
@@ -56,3 +58,7 @@ void CLI::back() {
     path.pop_back();
   }
 }
+
+void CLI::stop() { running = false; }
+
+bool CLI::is_running() const { return running; }
