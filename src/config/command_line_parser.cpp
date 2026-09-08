@@ -23,9 +23,8 @@ AppConfig CommandLineParser::parse(int argc, char* argv[]) {
     std::size_t pos = 0;
     unsigned long interval = std::stoul(interval_argument, &pos);
 
-    if (pos != interval_argument.size() || interval < 1 || interval > 10) {
+    if (pos != interval_argument.size() || interval < 1) {
       std::cout << "Invalid interval. "
-                << "Interval must be between 1 and 10 seconds. "
                 << "Using default parameters." << std::endl;
 
       return config;

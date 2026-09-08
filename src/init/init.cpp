@@ -35,7 +35,7 @@ void Init::change_params() {
 
   std::cout << std::endl;
 
-  std::cout << "Enter new interval (1-10 seconds): ";
+  std::cout << "Enter new interval: ";
 
   unsigned int interval;
 
@@ -47,9 +47,9 @@ void Init::change_params() {
     return;
   }
 
-  if (interval < 1 || interval > 10) {
+  if (interval < 1) {
     std::cout << "Invalid interval. "
-              << "Interval must be between 1 and 10 seconds." << std::endl;
+              << "Interval must be greater than 1" << std::endl;
 
     return;
   }
