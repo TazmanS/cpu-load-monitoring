@@ -1,5 +1,6 @@
 #include "cpu_load_monitor.hpp"
 
+#include <poll.h>
 #include <unistd.h>
 
 #include <fstream>
@@ -111,4 +112,94 @@ bool CpuLoadMonitor::read_snapshots(std::vector<CpuSnapshot>& snapshots) {
   }
 
   return cores_read == snapshots.size();
+}
+
+void CpuLoadMonitor::print_to_file(const AppConfig& config) {
+  std::ofstream file(config.filename, std::ios::app);
+
+  if (!file.is_open()) {
+    std::cerr << "Failed to open output file: " << config.filename << std::endl;
+    return;
+  }
+
+  std::cout << std::endl;
+  std::cout << "Logging CPU load every " << config.interval << " seconds to "
+            << config.filename << std::endl;
+
+  std::cout << "Press 'q' to stop logging." << std::endl;
+
+  struct pollfd stdin_poll{};
+  stdin_poll.fd = STDIN_FILENO;
+  stdin_poll.events = POLLIN;
+
+  while (true) {
+    int result = poll(&stdin_poll, 1, static_cast<int>(config.interval * 1000));
+
+    if (result < 0) {
+      std::cerr << "poll() failed." << std::endl;
+      return;
+    }
+
+    if (result > 0 && (stdin_poll.revents & POLLIN)) {
+      char input;
+
+      std::cin >> input;
+
+      std::cin.ignore(10000, '\n');
+
+      if (input == 'q' || input == 'Q') {
+        std::cout << "Logging stopped." << std::endl;
+        return;
+      }
+
+      std::cout << "Unknown command. "
+                << "Press 'q' to stop logging." << std::endl;
+    }
+
+    if (result == 0) {
+      if (!read_snapshots(current_snapshots)) {
+        std::cerr << "Failed to read CPU snapshot." << std::endl;
+        continue;
+      }
+
+      file << "CPU Load:" << std::endl;
+
+      for (std::size_t i = 0; i < previous_snapshots.size(); ++i) {
+        const CpuSnapshot& previous = previous_snapshots[i];
+
+        const CpuSnapshot& current = current_snapshots[i];
+
+        unsigned long long previous_idle = previous.idle + previous.iowait;
+
+        unsigned long long current_idle = current.idle + current.iowait;
+
+        unsigned long long previous_total =
+            previous.user + previous.nice + previous.system + previous.idle +
+            previous.iowait + previous.irq + previous.softirq + previous.steal;
+
+        unsigned long long current_total =
+            current.user + current.nice + current.system + current.idle +
+            current.iowait + current.irq + current.softirq + current.steal;
+
+        unsigned long long total_delta = current_total - previous_total;
+
+        unsigned long long idle_delta = current_idle - previous_idle;
+
+        double load = 0.0;
+
+        if (total_delta > 0) {
+          load = 100.0 * (static_cast<double>(total_delta - idle_delta) /
+                          static_cast<double>(total_delta));
+        }
+
+        file << "  CPU" << i << ": " << std::fixed << std::setprecision(2)
+             << std::setw(6) << load << "%" << std::endl;
+      }
+
+      file << std::endl;
+      file.flush();
+
+      previous_snapshots = current_snapshots;
+    }
+  }
 }

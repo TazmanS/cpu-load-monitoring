@@ -1,8 +1,5 @@
 # Bazel generated files
-bazel-bin/
-bazel-out/
-bazel-testlogs/
-bazel-*/
+bazel-*
 
 # IDE / editor
 .vscode/

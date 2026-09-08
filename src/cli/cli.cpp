@@ -1,11 +1,18 @@
 #include "cli.hpp"
 
 #include <iostream>
+#include <vector>
 
 CLI::CLI(const std::vector<MenuItem>& menu) : menu(menu) {}
 
 void CLI::show_menu() {
-  for (const auto& item : menu) {
+  const std::vector<MenuItem>* current_menu = &menu;
+
+  for (std::size_t index : path) {
+    current_menu = &(*current_menu)[index].children;
+  }
+
+  for (const auto& item : *current_menu) {
     std::cout << item.key << ". " << item.title << std::endl;
   }
 
@@ -24,10 +31,16 @@ void CLI::show_menu() {
     return;
   }
 
-  for (const auto& item : menu) {
+  for (std::size_t index = 0; index < current_menu->size(); ++index) {
+    const MenuItem& item = (*current_menu)[index];
+
     if (item.key == choice) {
       if (item.callback) {
         item.callback();
+      }
+
+      if (!item.children.empty()) {
+        path.push_back(index);
       }
 
       return;
@@ -36,4 +49,10 @@ void CLI::show_menu() {
 
   std::cout << "Invalid option." << std::endl;
   std::cout << std::endl;
+}
+
+void CLI::back() {
+  if (!path.empty()) {
+    path.pop_back();
+  }
 }
