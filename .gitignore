@@ -1,0 +1,19 @@
+# Bazel generated files
+bazel-bin/
+bazel-out/
+bazel-testlogs/
+bazel-*/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.out
